@@ -7,27 +7,26 @@ import (
 	"github.com/yangxm/gecko/logger"
 )
 
-type hostWhiteList struct {
+type HostWhiteList struct {
 	hosts map[string]bool
 	mutex sync.RWMutex
 }
 
 var (
-	hostWhiteListInstance *hostWhiteList
+	HostWhiteListInstance *HostWhiteList
 	hostWhiteListOnce     sync.Once
 )
 
-func HostWhiteList() *hostWhiteList {
+func init() {
 	hostWhiteListOnce.Do(func() {
-		hostWhiteListInstance = &hostWhiteList{
+		HostWhiteListInstance = &HostWhiteList{
 			hosts: make(map[string]bool),
 		}
-		logger.Debug("CREATE HWL")
+		logger.Debug("HostWhiteList Instance Created")
 	})
-	return hostWhiteListInstance
 }
 
-func (h *hostWhiteList) Load(hosts []string) {
+func (h *HostWhiteList) Load(hosts []string) {
 	logger.Debug("LOAD HWL --- %v", hosts)
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -45,7 +44,7 @@ func (h *hostWhiteList) Load(hosts []string) {
 	}
 }
 
-func (h *hostWhiteList) Add(host string) {
+func (h *HostWhiteList) Add(host string) {
 	host = strings.TrimSpace(host)
 	if host == "" {
 		logger.Error("+ HWL FAILED, EMPTY PARAM")
@@ -64,7 +63,7 @@ func (h *hostWhiteList) Add(host string) {
 	logger.Debug("+ HWL --- %s", host)
 }
 
-func (h *hostWhiteList) Remove(host string) {
+func (h *HostWhiteList) Remove(host string) {
 	host = strings.TrimSpace(host)
 	if host == "" {
 		logger.Error("- HWL FAILED, EMPTY PARAM")
@@ -83,7 +82,7 @@ func (h *hostWhiteList) Remove(host string) {
 	logger.Debug("- HWL --- %s", host)
 }
 
-func (h *hostWhiteList) Contains(host string, checkSubDomain bool) bool {
+func (h *HostWhiteList) Contains(host string, checkSubDomain bool) bool {
 	return true
 	// host = strings.TrimSpace(host)
 	// if host == "" {
@@ -112,7 +111,7 @@ func (h *hostWhiteList) Contains(host string, checkSubDomain bool) bool {
 	// return false
 }
 
-func (h *hostWhiteList) GetHosts() []string {
+func (h *HostWhiteList) GetHosts() []string {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 

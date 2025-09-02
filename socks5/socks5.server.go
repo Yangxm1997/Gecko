@@ -153,7 +153,7 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 		logger.Debug("SOCKS5[%s] CONN, ADDR: %s, PORT: %v", sk5Conn.ShortID(), addr, port)
 
 		// 连接目标
-		if HostWhiteList().Contains(addr, atyp == addrTypeDomain) {
+		if HostWhiteListInstance.Contains(addr, atyp == addrTypeDomain) {
 			sk5Conn.SetTarget(addr, port, atyp, true)
 			targetAddr := fmt.Sprintf("%s:%d", addr, port)
 			logger.Info("SOCKS5[%s] CONN, DIRECT CONNECT TO %s", sk5Conn.ShortID(), targetAddr)
