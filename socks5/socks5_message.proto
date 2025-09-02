@@ -1,0 +1,30 @@
+
+syntax = "proto3";
+package socks5;
+option go_package = "./socks5;socks5";
+
+message MessageHeader {
+    bytes type = 1;
+    bytes flag = 2;
+    string clientId = 3;
+    string connId = 4;
+    bytes serverType = 5;
+}
+
+message MessageTV {
+    int32 type = 1;
+    string value = 2;
+}
+
+message MessageData {
+    bytes addrType = 1;
+    string addr = 2;
+    int32 port = 3;
+    bytes payload = 4;
+}
+
+message Message {
+    MessageHeader header = 1;
+    repeated MessageTV tvs = 2;
+    bytes data = 3;
+}
