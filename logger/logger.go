@@ -28,7 +28,7 @@ var (
 	defaultLogConfig = &LogConfig{
 		Level:  "debug",
 		Format: "console",
-		Output: []string{"stdout", "stderr"},
+		Output: []string{"stdout"},
 	}
 )
 

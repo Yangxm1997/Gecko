@@ -10,7 +10,7 @@ import (
 	"github.com/yangxm/gecko/logger"
 )
 
-type Sock5Conn struct {
+type Socks5Conn struct {
 	net.Conn
 	mutex          sync.RWMutex
 	connID         string
@@ -23,9 +23,9 @@ type Sock5Conn struct {
 	attrs          map[string]interface{}
 }
 
-func NewSocks5Conn(conn net.Conn) *Sock5Conn {
+func NewSocks5Conn(conn net.Conn) *Socks5Conn {
 	connID := uuid.New().String()
-	s := &Sock5Conn{
+	s := &Socks5Conn{
 		Conn:           conn,
 		connID:         connID,
 		shortID:        connID[:6],
@@ -40,7 +40,7 @@ func NewSocks5Conn(conn net.Conn) *Sock5Conn {
 	return s
 }
 
-func (s *Sock5Conn) SetTarget(targetAddr string, targetPort int, targetAddrType byte, isDirect bool) error {
+func (s *Socks5Conn) SetTarget(targetAddr string, targetPort int, targetAddrType byte, isDirect bool) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -60,40 +60,40 @@ func (s *Sock5Conn) SetTarget(targetAddr string, targetPort int, targetAddrType 
 	return nil
 }
 
-func (s *Sock5Conn) SetConnected(isConnected bool) {
+func (s *Socks5Conn) SetConnected(isConnected bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	s.isConnected = isConnected
 	logger.Debug("CONN[%s] SET CONNECTED %v", s.shortID, isConnected)
 }
 
-func (s *Sock5Conn) IsConnected() bool {
+func (s *Socks5Conn) IsConnected() bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.isConnected && s.targetAddr != "" && s.targetPort != -1
 }
 
-func (s *Sock5Conn) GetTarget() (string, int, byte, bool) {
+func (s *Socks5Conn) GetTarget() (string, int, byte, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.targetAddr, int(s.targetPort), s.targetAddrType, s.isDirect
 }
 
-func (s *Sock5Conn) SetAttr(key string, value interface{}) {
+func (s *Socks5Conn) SetAttr(key string, value interface{}) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.attrs[key] = value
 	logger.Debug("CONN[%s] SET ATTR %s:%v", s.shortID, key, value)
 }
 
-func (s *Sock5Conn) GetAttr(key string) (interface{}, bool) {
+func (s *Socks5Conn) GetAttr(key string) (interface{}, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	value, ok := s.attrs[key]
 	return value, ok
 }
 
-func (s *Sock5Conn) RemoveAttr(key string) (interface{}, bool) {
+func (s *Socks5Conn) RemoveAttr(key string) (interface{}, bool) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	value, ok := s.attrs[key]
@@ -103,7 +103,7 @@ func (s *Sock5Conn) RemoveAttr(key string) (interface{}, bool) {
 	return value, ok
 }
 
-func (s *Sock5Conn) Close() error {
+func (s *Socks5Conn) Close() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.targetAddr = ""
@@ -116,14 +116,14 @@ func (s *Sock5Conn) Close() error {
 	return s.Conn.Close()
 }
 
-func (s *Sock5Conn) ConnID() string {
+func (s *Socks5Conn) ConnID() string {
 	return s.connID
 }
 
-func (s *Sock5Conn) ShortID() string {
+func (s *Socks5Conn) ShortID() string {
 	return s.shortID
 }
 
-func (s *Sock5Conn) IsDirect() bool {
+func (s *Socks5Conn) IsDirect() bool {
 	return s.isDirect
 }

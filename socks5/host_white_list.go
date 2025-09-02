@@ -84,31 +84,32 @@ func (h *hostWhiteList) Remove(host string) {
 }
 
 func (h *hostWhiteList) Contains(host string, checkSubDomain bool) bool {
-	host = strings.TrimSpace(host)
-	if host == "" {
-		logger.Error("CHK HWL FAILED, EMPTY PARAM")
-		return false
-	}
+	return true
+	// host = strings.TrimSpace(host)
+	// if host == "" {
+	// 	logger.Error("CHK HWL FAILED, EMPTY PARAM")
+	// 	return false
+	// }
 
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
+	// h.mutex.RLock()
+	// defer h.mutex.RUnlock()
 
-	// 检查完整域名
-	if h.hosts[host] {
-		return true
-	}
+	// // 检查完整域名
+	// if h.hosts[host] {
+	// 	return true
+	// }
 
-	// 检查子域名
-	if checkSubDomain {
-		parts := strings.Split(host, ".")
-		for i := 1; i < len(parts)-1; i++ {
-			subDomain := strings.Join(parts[i:], ".")
-			if h.hosts[subDomain] {
-				return true
-			}
-		}
-	}
-	return false
+	// // 检查子域名
+	// if checkSubDomain {
+	// 	parts := strings.Split(host, ".")
+	// 	for i := 1; i < len(parts)-1; i++ {
+	// 		subDomain := strings.Join(parts[i:], ".")
+	// 		if h.hosts[subDomain] {
+	// 			return true
+	// 		}
+	// 	}
+	// }
+	// return false
 }
 
 func (h *hostWhiteList) GetHosts() []string {
