@@ -37,6 +37,7 @@ func (s *Socks5Server) Start() error {
 }
 
 func (s *Socks5Server) handleConn(sk5Conn *Socks5Conn) {
+	defer sk5Conn.Close()
 	if err := s.handleAuth(sk5Conn); err != nil {
 		logger.Error("SOCKS5[%s] AUTH FAILED, ERR: %v", sk5Conn.ShortID(), err)
 		return
@@ -166,18 +167,8 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 					sk5Conn.RemoteAddr(), targetConn.RemoteAddr())
 				sk5Conn.SetConnected(true)
 				sk5Conn.Write(Socks5CmdConnectSuccess())
-				go func() {
-					defer targetConn.Close()
-					for {
-						s.directForward(targetConn, sk5Conn)
-					}
-				}()
-				go func() {
-					defer sk5Conn.Close()
-					for {
-						s.directForward(sk5Conn, targetConn)
-					}
-				}()
+				go s.directForward(targetConn, sk5Conn)
+				s.directForward(sk5Conn, targetConn)
 
 			}
 		}

@@ -16,7 +16,7 @@ type Socks5Conn struct {
 	connID         string
 	shortID        string
 	targetAddr     string
-	targetPort     int32
+	targetPort     int
 	targetAddrType byte
 	isConnected    bool
 	isDirect       bool
@@ -53,7 +53,7 @@ func (s *Socks5Conn) SetTarget(targetAddr string, targetPort int, targetAddrType
 	}
 
 	s.targetAddr = targetAddr
-	s.targetPort = s.targetPort
+	s.targetPort = targetPort
 	s.targetAddrType = targetAddrType
 	s.isDirect = isDirect
 	logger.Debug("CONN[%s] SET TARGET --- %s:%d %d %v", s.shortID, targetAddr, targetPort, targetAddrType, isDirect)
