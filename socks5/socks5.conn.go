@@ -36,7 +36,7 @@ func NewSocks5Conn(conn net.Conn) *Socks5Conn {
 		isDirect:       false,
 		attrs:          make(map[string]interface{}),
 	}
-	logger.Debug("CONN[%s] CREATED", s.shortID)
+	logger.Debug("SOCKS5[%s] CREATED", s.shortID)
 	return s
 }
 
@@ -49,14 +49,14 @@ func (s *Socks5Conn) SetTarget(targetAddr string, targetPort int, targetAddrType
 		return fmt.Errorf("CONN[%s] ADDR IS EMPTY", s.shortID)
 	}
 	if targetPort <= 0 || targetPort > 65535 {
-		return fmt.Errorf("CONN[%s] PORT %d IS INVALID", s.shortID, targetPort)
+		return fmt.Errorf("SOCKS5[%s] PORT %d IS INVALID", s.shortID, targetPort)
 	}
 
 	s.targetAddr = targetAddr
 	s.targetPort = targetPort
 	s.targetAddrType = targetAddrType
 	s.isDirect = isDirect
-	logger.Debug("CONN[%s] SET TARGET --- %s:%d %d %v", s.shortID, targetAddr, targetPort, targetAddrType, isDirect)
+	logger.Debug("SOCKS5[%s] SET TARGET --- %s:%d %d %v", s.shortID, targetAddr, targetPort, targetAddrType, isDirect)
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (s *Socks5Conn) SetConnected(isConnected bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	s.isConnected = isConnected
-	logger.Debug("CONN[%s] SET CONNECTED %v", s.shortID, isConnected)
+	logger.Debug("SOCKS5[%s] SET CONNECTED %v", s.shortID, isConnected)
 }
 
 func (s *Socks5Conn) IsConnected() bool {
@@ -83,7 +83,7 @@ func (s *Socks5Conn) SetAttr(key string, value interface{}) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.attrs[key] = value
-	logger.Debug("CONN[%s] SET ATTR %s:%v", s.shortID, key, value)
+	logger.Debug("SOCKS5[%s] SET ATTR %s:%v", s.shortID, key, value)
 }
 
 func (s *Socks5Conn) GetAttr(key string) (interface{}, bool) {
@@ -112,7 +112,7 @@ func (s *Socks5Conn) Close() error {
 	s.isConnected = false
 	s.isDirect = false
 	s.attrs = nil
-	logger.Debug("CONN[%s] CLOSE", s.shortID)
+	logger.Debug("SOCKS5[%s] CLOSE", s.shortID)
 	return s.Conn.Close()
 }
 

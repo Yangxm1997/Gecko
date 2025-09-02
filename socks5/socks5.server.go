@@ -37,14 +37,15 @@ func (s *Socks5Server) Start() error {
 }
 
 func (s *Socks5Server) handleConn(sk5Conn *Socks5Conn) {
-	defer sk5Conn.Close()
 	if err := s.handleAuth(sk5Conn); err != nil {
 		logger.Error("SOCKS5[%s] AUTH FAILED, ERR: %v", sk5Conn.ShortID(), err)
+		sk5Conn.Close()
 		return
 	}
 
 	if err := s.handleRequest(sk5Conn); err != nil {
 		logger.Error("SOCKS5[%s] CONN FAILED, ERR: %v", sk5Conn.ShortID(), err)
+		sk5Conn.Close()
 		return
 	}
 }
@@ -163,23 +164,16 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 				sk5Conn.Write(Socks5CmdConnectFailed())
 				return fmt.Errorf("SOCKS5 CONN, CONNECT TO TARGET FAILED: %v", err)
 			} else {
+				// defer targetConn.Close()
 				logger.Info("SOCKS5[%s] CONN, CONNECT TO TARGET SUCCESS, L:%v --> R:%v", sk5Conn.ShortID(),
 					sk5Conn.RemoteAddr(), targetConn.RemoteAddr())
 				sk5Conn.SetConnected(true)
 				sk5Conn.Write(Socks5CmdConnectSuccess())
-				go s.directForward(targetConn, sk5Conn)
-				s.directForward(sk5Conn, targetConn)
-
+				forwarder := NewDirectForwarder(sk5Conn, targetConn)
+				forwarder.Start()
+				<-forwarder.Done
 			}
 		}
 		return nil
-	}
-}
-
-func (s *Socks5Server) directForward(dst net.Conn, src net.Conn) {
-	if n, err := io.Copy(dst, src); err != nil && err != io.EOF {
-		logger.Error("DIRECT F:%v --> T:%v, ERR: %v", src.RemoteAddr(), dst.RemoteAddr(), err)
-	} else {
-		logger.Debug("DIRECT F:%v --> T:%v, N: %d", src.RemoteAddr(), dst.RemoteAddr(), n)
 	}
 }
