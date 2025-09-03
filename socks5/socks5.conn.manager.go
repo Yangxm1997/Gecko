@@ -54,6 +54,11 @@ func (m *Socks5ConnManager) Get(connID string) (*Socks5Conn, bool) {
 	return conn, ok
 }
 
+func (m *Socks5ConnManager) Exist(connID string) bool {
+	v, ok := m.conns[connID]
+	return ok && v != nil
+}
+
 func (m *Socks5ConnManager) Write(connID string, data []byte) (int, error) {
 	if data == nil {
 		logger.Warn("[SOCKS4MGR] WRITE FAILED, DATA IS NIL", connID[:6])

@@ -1,0 +1,30 @@
+syntax = "proto3";
+package socks5;
+option go_package = "./entity;entity";
+
+message MessageHeader {
+  bytes type = 1;
+  bytes flag = 2;
+  string clientID = 3;
+  string connID = 4;
+  bytes serverType = 5;
+}
+
+message MessageTV {
+  int32 type = 1;
+  string value = 2;
+}
+
+message Message {
+  MessageHeader header = 1;
+  repeated MessageTV tvs = 2;
+  bytes data = 3;
+}
+
+message Notification {
+  int32 code = 1;
+  string message = 2;
+  bytes atyp = 3;
+  string addr = 4;
+  int32 port = 5;
+}
