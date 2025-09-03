@@ -97,7 +97,7 @@ func (c *ClientHandler) OnClientReceived(data []byte) {
 func (c *ClientHandler) handleData(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling Data", traceID, shortConn)
-	if wn, err := socks5.ConnManagerInstance.Write(connID, data); err != nil {
+	if wn, err := socks5.ConnManagerInstance.WriteIfConnected(connID, data); err != nil {
 		logger.Error("[%s] RECV [%s] ERROR, write data to client failed: %v", traceID, shortConn, err)
 		socks5.ConnManagerInstance.RemoveAndClose(connID)
 	} else {

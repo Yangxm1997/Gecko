@@ -61,6 +61,18 @@ func (m *ConnManager) Exist(connID string) bool {
 }
 
 func (m *ConnManager) Write(connID string, data []byte) (int, error) {
+	return m.write(connID, data, func(sk5Conn *Socks5Conn, d []byte) (int, error) {
+		return sk5Conn.Write(d)
+	})
+}
+
+func (m *ConnManager) WriteIfConnected(connID string, data []byte) (int, error) {
+	return m.write(connID, data, func(sk5Conn *Socks5Conn, d []byte) (int, error) {
+		return sk5Conn.WriteIfConnected(d)
+	})
+}
+
+func (m *ConnManager) write(connID string, data []byte, delegate func(sk5Conn *Socks5Conn, d []byte) (int, error)) (int, error) {
 	if data == nil {
 		logger.Warn("[CONNMGR] [%s] write failed, data bytes is nil", util.ShortConnID(connID))
 		return 0, nil
@@ -78,8 +90,13 @@ func (m *ConnManager) Write(connID string, data []byte) (int, error) {
 		return 0, fmt.Errorf("[CONNMGR] [%s] socks5 conn not found", connID)
 	}
 
+	if !conn.IsProxy() {
+		logger.Error("[CONNMGR] [%s] write failed, socks5 conn is not proxy: %s", util.ShortConnID(connID), connID)
+		return 0, fmt.Errorf("[CONNMGR] [%s] socks5 conn is not proxy", connID)
+	}
+
 	logger.Debug("[CONNMGR] [%s] trying to write --- %d", conn.shortID, dataLen)
-	if n, err := conn.Write(data); err != nil {
+	if n, err := delegate(conn, data); err != nil {
 		logger.Error("[CONNMGR] [%s] write failed: %v", conn.shortID, err)
 		return n, err
 	} else {

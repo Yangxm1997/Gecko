@@ -1,6 +1,7 @@
 package socks5
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -9,9 +10,10 @@ import (
 )
 
 type Socks5Server struct {
-	ID       string
-	BindAddr string
-	BindPort int
+	ID         string
+	BindAddr   string
+	BindPort   int
+	BridgeConn net.Conn
 }
 
 func (s *Socks5Server) Start() error {
@@ -154,7 +156,11 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 
 		// 连接目标
 		if HostWhiteListInstance.Contains(addr, atyp == addrTypeDomain) {
-			sk5Conn.SetTarget(addr, port, atyp, true)
+			if err := sk5Conn.SetTarget(addr, port, atyp, false); err != nil {
+				logger.Error("SOCKS5[%s] CONN, set conn target info failed, error: %v", sk5Conn.ShortID(), err)
+				return err
+			}
+
 			targetAddr := fmt.Sprintf("%s:%d", addr, port)
 			logger.Info("SOCKS5[%s] CONN, DIRECT CONNECT TO %s", sk5Conn.ShortID(), targetAddr)
 
@@ -174,13 +180,32 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 				<-forwarder.Done
 			}
 		} else {
-			if err := sk5Conn.SetTarget(addr, port, atyp, false); err != nil {
+			if err := sk5Conn.SetTarget(addr, port, atyp, true); err != nil {
 				logger.Error("SOCKS5[%s] CONN, set conn target info failed, error: %v", sk5Conn.ShortID(), err)
 				return err
 			}
+
 			targetAddr := fmt.Sprintf("%s:%d", addr, port)
 			logger.Info("SOCKS5[%s] CONN, proxy connect to %s", sk5Conn.ShortID(), targetAddr)
 			ConnManagerInstance.Add(sk5Conn)
+			if forwarder, err := NewProxyForwarder(sk5Conn, s.BridgeConn); err != nil {
+				logger.Error("SOCKS5[%s] CONN, create proxy forward failed: %v", sk5Conn.ShortID(), err)
+				return err
+			} else {
+				forwarder.Start()
+				select {
+				case v := <-forwarder.Done:
+					ConnManagerInstance.RemoveAndClose(sk5Conn.connID)
+					if v == "" || v == "Read EOF" {
+						return nil
+					} else {
+						return errors.New(v)
+					}
+				case <-sk5Conn.CloseChan:
+					return nil
+				}
+
+			}
 		}
 		return nil
 	}
