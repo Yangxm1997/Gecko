@@ -173,6 +173,14 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 				forwarder.Start()
 				<-forwarder.Done
 			}
+		} else {
+			if err := sk5Conn.SetTarget(addr, port, atyp, false); err != nil {
+				logger.Error("SOCKS5[%s] CONN, set conn target info failed, error: %v", sk5Conn.ShortID(), err)
+				return err
+			}
+			targetAddr := fmt.Sprintf("%s:%d", addr, port)
+			logger.Info("SOCKS5[%s] CONN, proxy connect to %s", sk5Conn.ShortID(), targetAddr)
+			ConnManagerInstance.Add(sk5Conn)
 		}
 		return nil
 	}

@@ -1,86 +1,98 @@
 package socks5
 
 import (
-	"errors"
+	"fmt"
+	"github.com/yangxm/gecko/util"
 	"sync"
 
 	"github.com/yangxm/gecko/logger"
 )
 
-type Socks5ConnManager struct {
+type ConnManager struct {
 	mutex sync.RWMutex
 	conns map[string]*Socks5Conn
 }
 
 var (
-	Socks5ConnManagerInstance *Socks5ConnManager
-	socks5ConnManagerOnce     sync.Once
+	ConnManagerInstance *ConnManager
+	connManagerOnce     sync.Once
 )
 
 func init() {
-	socks5ConnManagerOnce.Do(func() {
-		Socks5ConnManagerInstance = NewSocks5ConnManager()
-		logger.Debug("Socks5ConnManager Instance Created")
+	connManagerOnce.Do(func() {
+		ConnManagerInstance = NewSocks5ConnManager()
+		logger.Debug("[SOCKS4MGR] ConnManager Instance Created")
 	})
 }
 
-func NewSocks5ConnManager() *Socks5ConnManager {
-	return &Socks5ConnManager{
+func NewSocks5ConnManager() *ConnManager {
+	return &ConnManager{
 		conns: make(map[string]*Socks5Conn),
 	}
 }
 
-func (m *Socks5ConnManager) Add(conn *Socks5Conn) {
+func (m *ConnManager) Add(conn *Socks5Conn) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.conns[conn.connID] = conn
-	logger.Debug("[SOCKS5MGR] + %s", conn.shortID)
+	logger.Debug("[SOCKS5MGR] [%s] + %s", conn.shortID, conn.connID)
 }
 
-func (m *Socks5ConnManager) RemoveAndClose(connID string) {
+func (m *ConnManager) RemoveAndClose(connID string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if conn, ok := m.conns[connID]; ok {
-		conn.Close()
+		_ = conn.Close()
 		delete(m.conns, connID)
-		logger.Debug("[SOCKS5MGR] - %s", conn.shortID)
+		logger.Debug("[SOCKS5MGR] [%s] - %s", conn.shortID, conn.connID)
 	}
 }
 
-func (m *Socks5ConnManager) Get(connID string) (*Socks5Conn, bool) {
+func (m *ConnManager) Get(connID string) (*Socks5Conn, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	conn, ok := m.conns[connID]
 	return conn, ok
 }
 
-func (m *Socks5ConnManager) Exist(connID string) bool {
+func (m *ConnManager) Exist(connID string) bool {
 	v, ok := m.conns[connID]
 	return ok && v != nil
 }
 
-func (m *Socks5ConnManager) Write(connID string, data []byte) (int, error) {
+func (m *ConnManager) Write(connID string, data []byte) (int, error) {
 	if data == nil {
-		logger.Warn("[SOCKS4MGR] WRITE FAILED, DATA IS NIL", connID[:6])
+		logger.Warn("[SOCKS4MGR] [%s] write failed, data bytes is nil", util.ShortConnID(connID))
+		return 0, nil
+	}
+
+	dataLen := len(data)
+	if dataLen == 0 {
+		logger.Warn("[SOCKS4MGR] [%s] write failed, data bytes is empty", util.ShortConnID(connID))
 		return 0, nil
 	}
 
 	conn, ok := m.Get(connID)
 	if !ok {
-		return 0, errors.New("SOCKS5 CONN NOT FOUND")
+		logger.Error("[SOCKS4MGR] [%s] write failed, socks5 conn not found: %s", util.ShortConnID(connID), connID)
+		return 0, fmt.Errorf("[SOCKS4MGR] [%s] socks5 conn not found", connID)
 	}
 
-	logger.Debug("[SOCKS4MGR] TRY TO WRITE [%s] %d", conn.shortID, len(data))
+	logger.Debug("[SOCKS4MGR] [%s] trying to write --- %d", conn.shortID, dataLen)
 	if n, err := conn.Write(data); err != nil {
-		logger.Error("[SOCKS5MGR] WRITE [%s] ERROR: %v", conn.shortID, err)
+		logger.Error("[SOCKS5MGR] [%s] write failed: %v", conn.shortID, err)
 		return n, err
 	} else {
-		logger.Debug("[SOCKS5MGR] WRITE [%s] %d", conn.shortID, n)
+		if n == dataLen {
+			logger.Debug("[SOCKS5MGR] [%s] write success: %d", conn.shortID, dataLen)
+		} else {
+			logger.Warn("[SOCKS5MGR] [%s] write success warning, expected: %d, actual: %d", conn.shortID, dataLen, n)
+		}
 		return n, nil
 	}
 }
 
-func (m *Socks5ConnManager) Len() int {
+func (m *ConnManager) Len() int {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return len(m.conns)
