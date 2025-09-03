@@ -3,8 +3,10 @@ package socks5
 import (
 	"errors"
 	"fmt"
+	"github.com/yangxm/gecko/util"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/yangxm/gecko/logger"
 )
@@ -39,52 +41,57 @@ func (s *Socks5Server) Start() error {
 }
 
 func (s *Socks5Server) handleConn(sk5Conn *Socks5Conn) {
+	shortConn := util.ShortConnID(sk5Conn.connID)
+	defer func(sk5Conn *Socks5Conn) {
+		if err := sk5Conn.Close(); err != nil {
+			logger.Warn("SOCKS5[%s] close sk5Conn failed: %v", shortConn, err)
+		}
+	}(sk5Conn)
+
 	if err := s.handleAuth(sk5Conn); err != nil {
-		logger.Error("SOCKS5[%s] AUTH FAILED, ERR: %v", sk5Conn.ShortID(), err)
-		sk5Conn.Close()
+		logger.Error("SOCKS5[%s] handle auth failed: %v", shortConn, err)
 		return
 	}
 
 	if err := s.handleRequest(sk5Conn); err != nil {
-		logger.Error("SOCKS5[%s] CONN FAILED, ERR: %v", sk5Conn.ShortID(), err)
-		sk5Conn.Close()
-		return
+		logger.Error("SOCKS5[%s] handle request failed: %v", shortConn, err)
 	}
 }
 
 func (s *Socks5Server) handleAuth(sk5Conn *Socks5Conn) error {
-	logger.Debug("SOCKS5[%s] AUTH", sk5Conn.ShortID())
+	shortConn := util.ShortConnID(sk5Conn.connID)
+	logger.Debug("SOCKS5[%s] handle auth start", shortConn)
 	buf := make([]byte, 256)
 
-	if n, err := io.ReadFull(sk5Conn, buf[:2]); err != nil || n != 2 {
-		logger.Error("SOCKS5[%s] AUTH, READ FAILED, N: %d, ERR: %v", sk5Conn.ShortID(), n, err)
-		var errMsg string
-		if err != nil {
-			errMsg = fmt.Sprintf("%v", err)
-		} else {
-			errMsg = fmt.Sprintf("N: %d", n)
-		}
-		return fmt.Errorf("SOCKS5 AUTH, READ FAILED: %s", errMsg)
-	} else {
-		ver, nMethods := buf[0], buf[1]
-		logger.Debug("SOCKS5[%s] AUTH, VER: %v, NMETHODS: %v", sk5Conn.ShortID(), ver, nMethods)
-		if ver != socks5Version {
-			logger.Error("SOCKS5[%s] AUTH FAILED, INVALID VER %v", sk5Conn.ShortID(), ver)
-			return fmt.Errorf("SOCKS5 AUTH, INVALID VER %v", ver)
-		}
-
-		if _, err := io.ReadFull(sk5Conn, buf[:nMethods]); err != nil {
-			logger.Error("SOCKS5[%s] AUTH, READ METHODS FAILED, ERR: %v", sk5Conn.ShortID(), err)
-			return fmt.Errorf("SOCKS5 AUTH, READ METHODS FAILED: %v", err)
-		}
-		logger.Debug("SOCKS5[%s] AUTH, METHODS: %v", sk5Conn.ShortID(), buf[:nMethods])
-
-		if _, err := sk5Conn.Write(Socks5NoAuth()); err != nil {
-			logger.Error("SOCKS5[%s] AUTH FAILED, WRITE RESP FAILED, ERR: %v", sk5Conn.ShortID(), err)
-			return fmt.Errorf("SOCKS5 AUTH, WRITE RESP FAILED: %v", err)
-		}
-		logger.Debug("SOCKS5[%s] AUTH, WRITE RESP SUCCESS", sk5Conn.ShortID())
+	n, err := io.ReadFull(sk5Conn, buf[:2])
+	if err != nil {
+		logger.Error("SOCKS5[%s] handle auth, read message failed: %v", shortConn, err)
+		return fmt.Errorf("[handle auth] read message failed: %v", err)
 	}
+
+	if n != 2 {
+		logger.Error("SOCKS5[%s] handle auth, message length: %d", shortConn, n)
+		return fmt.Errorf("[handle auth] message length: %d", n)
+	}
+
+	ver, nMethods := buf[0], buf[1]
+	logger.Debug("SOCKS5[%s] handle auth, ver: %v, nMethods: %v", shortConn, ver, nMethods)
+	if ver != socks5Version {
+		logger.Error("SOCKS5[%s] handle auth, invalid ver: %v", shortConn, ver)
+		return fmt.Errorf("[handle auth] invalid ver: %v", ver)
+	}
+
+	if _, err := io.ReadFull(sk5Conn, buf[:nMethods]); err != nil {
+		logger.Error("SOCKS5[%s] handle auth, read methods failed: %v", shortConn, err)
+		return fmt.Errorf("[handle auth] read methods failed: %v", err)
+	}
+	logger.Debug("SOCKS5[%s] handle auth, methods: %v", shortConn, ver, buf[:nMethods])
+
+	if _, err := sk5Conn.Write(Socks5NoAuth()); err != nil {
+		logger.Error("SOCKS5[%s] handle auth, write response failed: %v", shortConn, err)
+		return fmt.Errorf("SOCKS5 AUTH, WRITE RESP FAILED: %v", err)
+	}
+	logger.Debug("SOCKS5[%s] AUTH, WRITE RESP SUCCESS", shortConn)
 	return nil
 }
 
@@ -156,29 +163,7 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 
 		// 连接目标
 		if HostWhiteListInstance.Contains(addr, atyp == addrTypeDomain) {
-			if err := sk5Conn.SetTarget(addr, port, atyp, false); err != nil {
-				logger.Error("SOCKS5[%s] CONN, set conn target info failed, error: %v", sk5Conn.ShortID(), err)
-				return err
-			}
-
-			targetAddr := fmt.Sprintf("%s:%d", addr, port)
-			logger.Info("SOCKS5[%s] CONN, DIRECT CONNECT TO %s", sk5Conn.ShortID(), targetAddr)
-
-			if targetConn, err := net.Dial("tcp", targetAddr); err != nil {
-				logger.Error("SOCKS5[%s] CONN, CONNECT TO TARGET FAILED, ERR: %v", sk5Conn.ShortID(), err)
-				sk5Conn.SetConnected(false)
-				sk5Conn.Write(Socks5CmdConnectFailed())
-				return fmt.Errorf("SOCKS5 CONN, CONNECT TO TARGET FAILED: %v", err)
-			} else {
-				// defer targetConn.Close()
-				logger.Info("SOCKS5[%s] CONN, CONNECT TO TARGET SUCCESS, L:%v --> R:%v", sk5Conn.ShortID(),
-					sk5Conn.RemoteAddr(), targetConn.RemoteAddr())
-				sk5Conn.SetConnected(true)
-				sk5Conn.Write(Socks5CmdConnectSuccess())
-				forwarder := NewDirectForwarder(sk5Conn, targetConn)
-				forwarder.Start()
-				<-forwarder.Done
-			}
+			return handleDirect(sk5Conn, addr, port, atyp)
 		} else {
 			if err := sk5Conn.SetTarget(addr, port, atyp, true); err != nil {
 				logger.Error("SOCKS5[%s] CONN, set conn target info failed, error: %v", sk5Conn.ShortID(), err)
@@ -208,5 +193,55 @@ func (s *Socks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 			}
 		}
 		return nil
+	}
+}
+
+func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
+	shortConn := util.ShortConnID(sk5Conn.connID)
+	targetAddr := fmt.Sprintf("%s:%d", addr, port)
+	logger.Debug("SOCKS5[%s] handle direct start", shortConn)
+
+	if err := sk5Conn.SetTarget(addr, port, atyp, false); err != nil {
+		logger.Error("SOCKS5[%s] handle direct, set conn target info failed, error: %v", shortConn, err)
+		return fmt.Errorf("[handle direct] set conn target info failed: %v", err)
+	}
+
+	logger.Info("SOCKS5[%s] handle direct, connect to %s", shortConn, targetAddr)
+
+	if targetConn, err := net.Dial("tcp", targetAddr); err != nil {
+		logger.Error("SOCKS5[%s] handle direct, connect to target failed: %v", shortConn, err)
+		sk5Conn.SetConnected(false)
+		if _, err := sk5Conn.Write(Socks5CmdConnectFailed()); err != nil {
+			logger.Warn("SOCKS5[%s] handle direct, write Socks5CmdConnectFailed failed: %v", shortConn, err)
+		}
+		return fmt.Errorf("[handle direct] connect to target failed: %v", err)
+	} else {
+		defer func(targetConn net.Conn) {
+			if err := targetConn.Close(); err != nil {
+				logger.Warn("SOCKS5[%s] handle direct, close targetConn failed: %v", shortConn, err)
+			}
+		}(targetConn)
+
+		logger.Info("SOCKS5[%s] handle direct, connect to target success, L:%v --> R:%v", shortConn, sk5Conn.RemoteAddr(), targetConn.RemoteAddr())
+		sk5Conn.SetConnected(true)
+		if _, err := sk5Conn.Write(Socks5CmdConnectSuccess()); err != nil {
+			logger.Error("SOCKS5[%s] handle direct, write Socks5CmdConnectSuccess failed: %v", shortConn, err)
+
+			return fmt.Errorf("[handle direct] write Socks5CmdConnectSuccess failed: %v", err)
+		}
+
+		forwarder := NewDirectForwarder(sk5Conn, targetConn)
+		forwarder.Start()
+
+		doneMessage := <-forwarder.Done
+		close(forwarder.Done)
+
+		if doneMessage == "" || strings.Contains(doneMessage, "EOF") {
+			logger.Info("SOCKS5[%s] handle direct, done with EOF: %s", shortConn, doneMessage)
+			return nil
+		} else {
+			logger.Error("SOCKS5[%s] handle direct, done with error: %s", shortConn, doneMessage)
+			return fmt.Errorf("[handle direct] done with error: %s", doneMessage)
+		}
 	}
 }
