@@ -11,16 +11,16 @@ import (
 	"sync/atomic"
 )
 
-type ClientHandler struct {
+type ClientReceiver struct {
 	traceIdCounter atomic.Uint32
 	clientID       string
 }
 
-func NewClientHandler(clientID string) *ClientHandler {
-	return &ClientHandler{clientID: clientID}
+func NewClientReceiver(clientID string) *ClientReceiver {
+	return &ClientReceiver{clientID: clientID}
 }
 
-func (c *ClientHandler) nextTraceID() string {
+func (c *ClientReceiver) nextTraceID() string {
 	for {
 		old := c.traceIdCounter.Load()
 		newVal := old + 1
@@ -33,7 +33,7 @@ func (c *ClientHandler) nextTraceID() string {
 	}
 }
 
-func (c *ClientHandler) OnClientReceived(data []byte) {
+func (c *ClientReceiver) OnReceived(data []byte) {
 	traceID := c.nextTraceID()
 	logger.Debug("[%s] RECV %d", traceID, len(data))
 
@@ -94,7 +94,7 @@ func (c *ClientHandler) OnClientReceived(data []byte) {
 	}
 }
 
-func (c *ClientHandler) handleData(traceID, connID string, data []byte) {
+func (c *ClientReceiver) handleData(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling Data", traceID, shortConn)
 	if wn, err := socks5.WriteToSk5ConnIfConnected(connID, data); err != nil {
@@ -105,7 +105,7 @@ func (c *ClientHandler) handleData(traceID, connID string, data []byte) {
 	}
 }
 
-func (c *ClientHandler) handleConnectAck(traceID, connID string, data []byte) {
+func (c *ClientReceiver) handleConnectAck(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling ConnectAck", traceID, shortConn)
 	var notif entity.Notification
@@ -140,7 +140,7 @@ func (c *ClientHandler) handleConnectAck(traceID, connID string, data []byte) {
 	}
 }
 
-func (c *ClientHandler) handleClose(traceID, connID string, data []byte) {
+func (c *ClientReceiver) handleClose(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling Close", traceID, shortConn)
 	var notif entity.Notification
@@ -154,7 +154,7 @@ func (c *ClientHandler) handleClose(traceID, connID string, data []byte) {
 	logger.Debug("[%s] RECV [%s], handling Close, closed conn", traceID, shortConn)
 }
 
-func (c *ClientHandler) handleError(traceID, connID string, data []byte) {
+func (c *ClientReceiver) handleError(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling Error", traceID, shortConn)
 	var notif entity.Notification
