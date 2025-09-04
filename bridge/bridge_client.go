@@ -5,6 +5,7 @@ import (
 	"github.com/yangxm/gecko/coder"
 	"github.com/yangxm/gecko/entity"
 	"github.com/yangxm/gecko/logger"
+	"github.com/yangxm/gecko/manager"
 	"github.com/yangxm/gecko/socks5"
 	"github.com/yangxm/gecko/util"
 	"google.golang.org/protobuf/proto"
@@ -59,7 +60,7 @@ func (c *ClientHandler) OnClientReceived(data []byte) {
 		return
 	}
 
-	if !socks5.ConnManagerInstance.Exist(header.ConnID) {
+	if !manager.IsSk5ConnExist(header.ConnID) {
 		logger.Error("[%s] RECV ERROR, ConnID not exist, ConnID: %v", traceID, header.ConnID)
 		return
 	}
@@ -97,9 +98,9 @@ func (c *ClientHandler) OnClientReceived(data []byte) {
 func (c *ClientHandler) handleData(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling Data", traceID, shortConn)
-	if wn, err := socks5.ConnManagerInstance.WriteIfConnected(connID, data); err != nil {
+	if wn, err := manager.WriteToSk5ConnIfConnected(connID, data); err != nil {
 		logger.Error("[%s] RECV [%s] ERROR, write data to client failed: %v", traceID, shortConn, err)
-		socks5.ConnManagerInstance.RemoveAndClose(connID)
+		manager.RemoveAndCloseSk5Conn(connID)
 	} else {
 		logger.Debug("[%s] RECV [%s], write data to client success, %d", traceID, shortConn, wn)
 	}
@@ -115,7 +116,7 @@ func (c *ClientHandler) handleConnectAck(traceID, connID string, data []byte) {
 	}
 
 	logger.Debug("[%s] RECV [%s], handling ConnectAck, Addr --> %s:%d %v", traceID, shortConn, notif.Addr, notif.Port, notif.Atyp)
-	sk5Conn, res := socks5.ConnManagerInstance.Get(connID)
+	sk5Conn, res := manager.GetSk5Conn(connID)
 	if !res || sk5Conn == nil {
 		logger.Error("[%s] RECV [%s] ERROR, handling ConnectAck, get conn failed", traceID, shortConn)
 		return
@@ -132,9 +133,9 @@ func (c *ClientHandler) handleConnectAck(traceID, connID string, data []byte) {
 		sk5Conn.SetConnected(false)
 	}
 
-	if wn, err := socks5.ConnManagerInstance.Write(connID, respBytes); err != nil {
+	if wn, err := manager.WriteToSk5Conn(connID, respBytes); err != nil {
 		logger.Error("[%s] RECV [%s] ERROR, write ConnectAck to client failed: %v", traceID, shortConn, err)
-		socks5.ConnManagerInstance.RemoveAndClose(connID)
+		manager.RemoveAndCloseSk5Conn(connID)
 	} else {
 		logger.Debug("[%s] RECV [%s], write ConnectAck to client success, %d", traceID, shortConn, wn)
 	}
@@ -150,7 +151,7 @@ func (c *ClientHandler) handleClose(traceID, connID string, data []byte) {
 		logger.Debug("[%s] RECV [%s], handling Close, Addr --> %s:%d %v, code: %d, message: %s",
 			traceID, shortConn, notif.Addr, notif.Port, notif.Atyp, notif.Code, notif.Message)
 	}
-	socks5.ConnManagerInstance.RemoveAndClose(connID)
+	manager.RemoveAndCloseSk5Conn(connID)
 	logger.Debug("[%s] RECV [%s], handling Close, closed conn", traceID, shortConn)
 }
 
@@ -165,6 +166,6 @@ func (c *ClientHandler) handleError(traceID, connID string, data []byte) {
 			traceID, shortConn, notif.Addr, notif.Port, notif.Atyp, notif.Code, notif.Message)
 	}
 
-	socks5.ConnManagerInstance.RemoveAndClose(connID)
+	manager.RemoveAndCloseSk5Conn(connID)
 	logger.Debug("[%s] RECV [%s], handling Error, closed conn", traceID, shortConn)
 }

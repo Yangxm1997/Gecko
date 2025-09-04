@@ -2,7 +2,9 @@ package socks5
 
 import (
 	"fmt"
+	"github.com/yangxm/gecko/manager"
 	"github.com/yangxm/gecko/util"
+	"github.com/yangxm/gecko/whitlist"
 	"io"
 	"net"
 	"strings"
@@ -172,7 +174,7 @@ func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
 	logger.Debug("SOCKS5[%s] handle request, target: %s:%d", shortConn, addr, port)
 
 	// 连接目标
-	if HostWhiteListInstance.Contains(addr, atyp == addrTypeDomain) {
+	if whitlist.Contains(addr, atyp == addrTypeDomain) {
 		return handleDirect(sk5Conn, addr, port, atyp)
 	} else {
 		return handleProxy(sk5Conn, addr, port, atyp, bridgeConn)
@@ -240,7 +242,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 	}
 
 	logger.Info("SOCKS5[%s] handle proxy, connect to %s", shortConn, targetAddr)
-	ConnManagerInstance.Add(sk5Conn)
+	manager.AddSock5Conn(sk5Conn)
 	forwarder, err := NewProxyForwarder(sk5Conn, bridgeConn)
 	if err != nil {
 		logger.Error("SOCKS5[%s] handle proxy, create proxy forward failed: %v", shortConn, err)
@@ -249,7 +251,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 
 	forwarder.Start()
 	doneMessage := <-forwarder.Done
-	ConnManagerInstance.RemoveAndClose(sk5Conn.connID)
+	manager.RemoveAndCloseSk5Conn(sk5Conn.connID)
 	if doneMessage == "" || strings.Contains(doneMessage, "EOF") || strings.Contains(doneMessage, "SkConn closed") {
 		logger.Info("SOCKS5[%s] handle proxy, done with %s", shortConn, doneMessage)
 		return nil
