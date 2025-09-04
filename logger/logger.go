@@ -26,7 +26,7 @@ var (
 	Logger           *zap.Logger
 	sugar            *zap.SugaredLogger
 	defaultLogConfig = &LogConfig{
-		Level:  "debug",
+		Level:  "info",
 		Format: "console",
 		Output: []string{"stdout"},
 	}

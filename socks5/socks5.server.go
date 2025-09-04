@@ -2,7 +2,6 @@ package socks5
 
 import (
 	"fmt"
-	"github.com/yangxm/gecko/manager"
 	"github.com/yangxm/gecko/util"
 	"github.com/yangxm/gecko/whitlist"
 	"io"
@@ -191,7 +190,7 @@ func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 		return fmt.Errorf("[handle direct] set conn target info failed: %v", err)
 	}
 
-	logger.Info("SOCKS5[%s] handle direct, connect to %s", shortConn, targetAddr)
+	logger.Debug("SOCKS5[%s] handle direct, connect to %s", shortConn, targetAddr)
 	if targetConn, err := net.Dial("tcp", targetAddr); err != nil {
 		logger.Error("SOCKS5[%s] handle direct, connect to target failed: %v", shortConn, err)
 		sk5Conn.SetConnected(false)
@@ -200,29 +199,33 @@ func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 		}
 		return fmt.Errorf("[handle direct] connect to target failed: %v", err)
 	} else {
-		defer func(targetConn net.Conn) {
+		var targetAddrLog string
+		if atyp == addrTypeDomain {
+			targetAddrLog = fmt.Sprintf("%s(%s)", targetAddr, targetConn.RemoteAddr())
+		} else {
+			targetAddrLog = fmt.Sprintf("%s", targetConn.RemoteAddr())
+		}
+
+		logger.Info("SOCKS5[%s] handle direct, L:%v --> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddrLog)
+		sk5Conn.SetConnected(true)
+		if _, err := sk5Conn.Write(Socks5CmdConnectSuccess()); err != nil {
+			logger.Error("SOCKS5[%s] handle direct, write Socks5CmdConnectSuccess failed: %v", shortConn, err)
 			if err := targetConn.Close(); err != nil {
 				logger.Warn("SOCKS5[%s] handle direct, close targetConn failed: %v", shortConn, err)
 			}
 			logger.Debug("SOCKS5[%s] targetConn[%s] closed", shortConn, targetAddr)
-		}(targetConn)
-
-		logger.Info("SOCKS5[%s] handle direct, connect to target success, L:%v --> R:%v", shortConn, sk5Conn.RemoteAddr(), targetConn.RemoteAddr())
-		sk5Conn.SetConnected(true)
-		if _, err := sk5Conn.Write(Socks5CmdConnectSuccess()); err != nil {
-			logger.Error("SOCKS5[%s] handle direct, write Socks5CmdConnectSuccess failed: %v", shortConn, err)
-
 			return fmt.Errorf("[handle direct] write Socks5CmdConnectSuccess failed: %v", err)
 		}
 
 		forwarder := NewDirectForwarder(sk5Conn, targetConn)
+		defer forwarder.CloseConn()
 		forwarder.Start()
 
 		doneMessage := <-forwarder.Done
-		close(forwarder.Done)
 
 		if doneMessage == "" || strings.Contains(doneMessage, "EOF") {
-			logger.Info("SOCKS5[%s] handle direct, done with %s", shortConn, doneMessage)
+			logger.Info("SOCKS5[%s] handle direct, L:%v ××> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddrLog)
+			logger.Debug("SOCKS5[%s] handle direct, done with %s", shortConn, doneMessage)
 			return nil
 		} else {
 			logger.Error("SOCKS5[%s] handle direct, done with error: %s", shortConn, doneMessage)
@@ -242,7 +245,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 	}
 
 	logger.Info("SOCKS5[%s] handle proxy, connect to %s", shortConn, targetAddr)
-	manager.AddSock5Conn(sk5Conn)
+	AddSock5Conn(sk5Conn)
 	forwarder, err := NewProxyForwarder(sk5Conn, bridgeConn)
 	if err != nil {
 		logger.Error("SOCKS5[%s] handle proxy, create proxy forward failed: %v", shortConn, err)
@@ -251,7 +254,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 
 	forwarder.Start()
 	doneMessage := <-forwarder.Done
-	manager.RemoveAndCloseSk5Conn(sk5Conn.connID)
+	RemoveAndCloseSk5Conn(sk5Conn.connID)
 	if doneMessage == "" || strings.Contains(doneMessage, "EOF") || strings.Contains(doneMessage, "SkConn closed") {
 		logger.Info("SOCKS5[%s] handle proxy, done with %s", shortConn, doneMessage)
 		return nil

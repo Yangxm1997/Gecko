@@ -34,12 +34,12 @@ func NewProxyForwarder(sk5Conn *Socks5Conn, bridgeConn net.Conn) (*ProxyForwarde
 		bridgeConn: bridgeConn,
 	}
 
-	logger.Info("PROXY[%s] forward created", p.sk5Conn.ShortID())
+	logger.Debug("PROXY[%s] forward created", p.sk5Conn.ShortID())
 	return p, nil
 }
 
 func (p *ProxyForwarder) Start() {
-	logger.Info("PROXY[%s] forward start", p.sk5Conn.ShortID())
+	logger.Debug("PROXY[%s] forward start", p.sk5Conn.ShortID())
 	go p.pipe()
 }
 

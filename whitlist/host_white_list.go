@@ -55,29 +55,29 @@ func Remove(host string) {
 }
 
 func Contains(host string, checkSubDomain bool) bool {
-	//return true
-	host = strings.TrimSpace(host)
-	if host == "" {
-		logger.Error("CHK HWL FAILED, EMPTY PARAM")
-		return false
-	}
-
-	// 检查完整域名
-	if whitelist[host] {
-		return true
-	}
-
-	// 检查子域名
-	if checkSubDomain {
-		parts := strings.Split(host, ".")
-		for i := 1; i < len(parts)-1; i++ {
-			subDomain := strings.Join(parts[i:], ".")
-			if whitelist[subDomain] {
-				return true
-			}
-		}
-	}
-	return false
+	return true
+	//host = strings.TrimSpace(host)
+	//if host == "" {
+	//	logger.Error("CHK HWL FAILED, EMPTY PARAM")
+	//	return false
+	//}
+	//
+	//// 检查完整域名
+	//if whitelist[host] {
+	//	return true
+	//}
+	//
+	//// 检查子域名
+	//if checkSubDomain {
+	//	parts := strings.Split(host, ".")
+	//	for i := 1; i < len(parts)-1; i++ {
+	//		subDomain := strings.Join(parts[i:], ".")
+	//		if whitelist[subDomain] {
+	//			return true
+	//		}
+	//	}
+	//}
+	//return false
 }
 
 func GetHosts() []string {

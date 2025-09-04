@@ -1,8 +1,7 @@
-package manager
+package socks5
 
 import (
 	"fmt"
-	"github.com/yangxm/gecko/socks5"
 	"github.com/yangxm/gecko/util"
 	"sync"
 
@@ -11,14 +10,14 @@ import (
 
 var (
 	sk5mutex sync.RWMutex
-	sk5Conns map[string]*socks5.Socks5Conn
+	sk5Conns map[string]*Socks5Conn
 )
 
 func init() {
-	sk5Conns = make(map[string]*socks5.Socks5Conn)
+	sk5Conns = make(map[string]*Socks5Conn)
 }
 
-func AddSock5Conn(sk5Conn *socks5.Socks5Conn) {
+func AddSock5Conn(sk5Conn *Socks5Conn) {
 	sk5mutex.Lock()
 	defer sk5mutex.Unlock()
 	sk5Conns[sk5Conn.ConnID()] = sk5Conn
@@ -37,7 +36,7 @@ func RemoveAndCloseSk5Conn(connID string) {
 	}
 }
 
-func GetSk5Conn(connID string) (*socks5.Socks5Conn, bool) {
+func GetSk5Conn(connID string) (*Socks5Conn, bool) {
 	sk5Conns, ok := sk5Conns[connID]
 	return sk5Conns, ok
 }
@@ -48,18 +47,18 @@ func IsSk5ConnExist(connID string) bool {
 }
 
 func WriteToSk5Conn(connID string, data []byte) (int, error) {
-	return writeToSk5Conn(connID, data, func(sk5Conn *socks5.Socks5Conn, d []byte) (int, error) {
+	return writeToSk5Conn(connID, data, func(sk5Conn *Socks5Conn, d []byte) (int, error) {
 		return sk5Conn.Write(d)
 	})
 }
 
 func WriteToSk5ConnIfConnected(connID string, data []byte) (int, error) {
-	return writeToSk5Conn(connID, data, func(sk5Conn *socks5.Socks5Conn, d []byte) (int, error) {
+	return writeToSk5Conn(connID, data, func(sk5Conn *Socks5Conn, d []byte) (int, error) {
 		return sk5Conn.WriteIfConnected(d)
 	})
 }
 
-func writeToSk5Conn(connID string, data []byte, delegate func(sk5Conn *socks5.Socks5Conn, d []byte) (int, error)) (int, error) {
+func writeToSk5Conn(connID string, data []byte, delegate func(sk5Conn *Socks5Conn, d []byte) (int, error)) (int, error) {
 	shortConn := util.ShortConnID(connID)
 	if data == nil {
 		logger.Warn("[CONNMGR] [%s] write failed, data bytes is nil", shortConn)
