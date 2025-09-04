@@ -244,7 +244,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 		return fmt.Errorf("[handle proxy] set conn target info failed: %v", err)
 	}
 
-	logger.Info("SOCKS5[%s] handle proxy, connect to %s", shortConn, targetAddr)
+	logger.Debug("SOCKS5[%s] handle proxy, connect to %s", shortConn, targetAddr)
 	AddSock5Conn(sk5Conn)
 	forwarder, err := NewProxyForwarder(sk5Conn, bridgeConn)
 	if err != nil {
@@ -252,11 +252,13 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 		return fmt.Errorf("[handle proxy] create proxy forward failed: %v", err)
 	}
 
+	logger.Info("SOCKS5[%s] handle proxy, L:%v --> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddr)
 	forwarder.Start()
 	doneMessage := <-forwarder.Done
 	RemoveAndCloseSk5Conn(sk5Conn.connID)
 	if doneMessage == "" || strings.Contains(doneMessage, "EOF") || strings.Contains(doneMessage, "SkConn closed") {
-		logger.Info("SOCKS5[%s] handle proxy, done with %s", shortConn, doneMessage)
+		logger.Info("SOCKS5[%s] handle proxy, L:%v ××> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddr)
+		logger.Debug("SOCKS5[%s] handle proxy, done with %s", shortConn, doneMessage)
 		return nil
 	} else {
 		logger.Error("SOCKS5[%s] handle proxy, done with error: %s", shortConn, doneMessage)
