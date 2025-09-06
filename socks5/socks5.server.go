@@ -1,15 +1,22 @@
 package socks5
 
 import (
+	"errors"
 	"fmt"
 	"github.com/yangxm/gecko/base"
+	"github.com/yangxm/gecko/logger"
 	"github.com/yangxm/gecko/util"
 	"github.com/yangxm/gecko/whitlist"
 	"io"
 	"net"
 	"strings"
+	"sync"
+)
 
-	"github.com/yangxm/gecko/logger"
+const (
+	serverStatusClosed  = 0
+	serverStatusRunning = 1
+	serverStatusClosing = 2
 )
 
 type ClientLocalSocks5Server struct {
@@ -17,6 +24,9 @@ type ClientLocalSocks5Server struct {
 	bindAddr        string
 	bindPort        int
 	bridgeTransport base.BridgeTransport
+	wg              sync.WaitGroup
+	mu              sync.Mutex
+	isClosing       bool
 }
 
 func NewClientLocalSocks5Server(clientID string, bindAddr string, bindPort int, bridgeTransport base.BridgeTransport) *ClientLocalSocks5Server {
@@ -24,6 +34,13 @@ func NewClientLocalSocks5Server(clientID string, bindAddr string, bindPort int, 
 }
 
 func (s *ClientLocalSocks5Server) Start() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.isClosing {
+		return errors.New("server is closing")
+	}
+
 	infoStr := fmt.Sprintf("[%s] %s:%d", s.clientID, s.bindAddr, s.bindPort)
 	logger.Info("Socks5 server start, %s", infoStr)
 	if listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.bindAddr, s.bindPort)); err != nil {
@@ -37,9 +54,14 @@ func (s *ClientLocalSocks5Server) Start() error {
 			logger.Info("Socks5 server listener %s closed", infoStr)
 		}(listener)
 
+		s.mu.Unlock()
 		logger.Info("Socks5 server listen success, %s", infoStr)
 
 		for {
+			if s.isClosing {
+				break
+			}
+
 			if conn, err := listener.Accept(); err != nil {
 				logger.Warn("Socks5 server accept failed, err: %v", err)
 				continue
@@ -48,16 +70,40 @@ func (s *ClientLocalSocks5Server) Start() error {
 				go s.handleConn(sk5Conn)
 			}
 		}
+		return nil
 	}
 }
 
+func (s *ClientLocalSocks5Server) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.isClosing {
+		logger.Warn("Socks5 server is closing")
+		return nil
+	}
+
+	s.isClosing = true
+	Sock5ConnManager().Close()
+	if s.bridgeTransport != nil {
+		_ = s.bridgeTransport.Close()
+	}
+	s.wg.Wait()
+	s.isClosing = false
+
+	logger.Info("Socks5 server closed")
+	return nil
+}
+
 func (s *ClientLocalSocks5Server) handleConn(sk5Conn *Socks5Conn) {
+	s.wg.Add(1)
 	shortConn := util.ShortConnID(sk5Conn.connID)
 	defer func(sk5Conn *Socks5Conn) {
 		if err := sk5Conn.Close(); err != nil {
 			logger.Warn("SOCKS5[%s] close sk5Conn failed: %v", shortConn, err)
 		}
 		logger.Debug("SOCKS5[%s] sk5Conn[%v] closed", shortConn, sk5Conn.RemoteAddr())
+		s.wg.Done()
 	}(sk5Conn)
 
 	logger.Debug("SOCKS5[%s] handle conn start", shortConn)

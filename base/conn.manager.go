@@ -11,5 +11,6 @@ type ConnManager[T net.Conn] interface {
 	IsExist(connID string) bool
 	Write(connID string, data []byte) (int, error)
 	WriteIfConnected(connID string, data []byte) (int, error)
+	Close()
 	Len() int
 }

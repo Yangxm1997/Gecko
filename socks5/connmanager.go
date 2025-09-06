@@ -72,6 +72,17 @@ func (s *_Sock5ConnManager) WriteIfConnected(connID string, data []byte) (int, e
 	})
 }
 
+func (s *_Sock5ConnManager) Close() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	logger.Debug("[CONNMGR] close all socks5 connections")
+	for connID, conn := range s.conns {
+		if err := conn.Close(); err != nil {
+			logger.Warn("[CONNMGR] [%s] close sk5Conn failed: %v", util.ShortConnID(connID), err)
+		}
+	}
+}
+
 func (s *_Sock5ConnManager) Len() int {
 	return len(s.conns)
 }
