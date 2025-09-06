@@ -2,36 +2,39 @@ package socks5
 
 import (
 	"fmt"
+	"github.com/yangxm/gecko/base"
+	"github.com/yangxm/gecko/entity"
 	"github.com/yangxm/gecko/logger"
 	"io"
-	"net"
 	"sync/atomic"
 )
 
 type ProxyForwarder struct {
-	Done       chan string
-	sk5Conn    *Socks5Conn
-	bridgeConn net.Conn
-	retries    atomic.Uint32
+	Done            chan string
+	sk5Conn         *Socks5Conn
+	bridgeTransport base.BridgeTransport
+	clientID        string
+	retries         atomic.Uint32
 }
 
 const (
 	proxyMaxRetry = 3
 )
 
-func NewProxyForwarder(sk5Conn *Socks5Conn, bridgeConn net.Conn) (*ProxyForwarder, error) {
+func NewProxyForwarder(sk5Conn *Socks5Conn, bridgeTransport base.BridgeTransport, clientID string) (*ProxyForwarder, error) {
 	if sk5Conn == nil {
 		return nil, fmt.Errorf("sk5Conn is nil")
 	}
 
-	if bridgeConn == nil {
-		return nil, fmt.Errorf("bridgeConn is nil")
+	if bridgeTransport == nil {
+		return nil, fmt.Errorf("bridgeTransport is nil")
 	}
 
 	p := &ProxyForwarder{
-		Done:       make(chan string),
-		sk5Conn:    sk5Conn,
-		bridgeConn: bridgeConn,
+		Done:            make(chan string),
+		sk5Conn:         sk5Conn,
+		bridgeTransport: bridgeTransport,
+		clientID:        clientID,
 	}
 
 	logger.Debug("PROXY[%s] forward created", p.sk5Conn.ShortID())
@@ -61,7 +64,7 @@ func (p *ProxyForwarder) pipe() {
 			written := 0
 			isBreak := false
 			for written < n {
-				wn, werr := p.bridgeConn.Write(buf[written:n])
+				wn, werr := p.bridgeTransport.Send(entity.MsgTypeData, entity.MsgFlagToServer, p.clientID, p.sk5Conn.ConnID(), 0x00, buf[written:n])
 				if werr != nil {
 					logger.Error("PROXY[%s] F:%v --> T:%v  write error: %v", shortConn, src, dst, werr)
 					p.retries.Add(1)

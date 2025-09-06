@@ -1,4 +1,4 @@
-package socks5
+package entity
 
 const (
 	socks5Version     byte = 0x05

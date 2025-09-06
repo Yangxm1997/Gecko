@@ -2,6 +2,7 @@ package socks5
 
 import (
 	"fmt"
+	"github.com/yangxm/gecko/entity"
 	"github.com/yangxm/gecko/util"
 	"io"
 	"net"
@@ -227,7 +228,7 @@ func (f *DirectForwarder) getAddr() (string, string) {
 	addr, port, atyp, _ := f.sk5Conn.GetTarget()
 	var src = f.sk5Conn.RemoteAddr().String()
 	var dst string
-	if atyp == addrTypeDomain {
+	if atyp == entity.addrTypeDomain {
 		dst = fmt.Sprintf("%s:%d(%s)", addr, port, f.dstConn.RemoteAddr().String())
 	} else {
 		dst = f.dstConn.RemoteAddr().String()

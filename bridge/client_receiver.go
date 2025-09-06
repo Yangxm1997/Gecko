@@ -64,7 +64,7 @@ func (c *ClientReceiver) OnReceived(data []byte) {
 		return
 	}
 
-	if header.Flag == nil || len(header.Flag) != 1 || socks5.MsgFlagToClient != header.Flag[0] {
+	if header.Flag == nil || len(header.Flag) != 1 || entity.MsgFlagToClient != header.Flag[0] {
 		logger.Error("[%s] RECV ERROR, illegal flag %v", traceID, header.Flag)
 		return
 	}
@@ -81,13 +81,13 @@ func (c *ClientReceiver) OnReceived(data []byte) {
 		return
 	} else {
 		switch _type {
-		case socks5.MsgTypeData:
+		case entity.MsgTypeData:
 			c.handleData(traceID, header.ConnID, decodedData)
-		case socks5.MsgTypeConnectAck:
+		case entity.MsgTypeConnectAck:
 			c.handleConnectAck(traceID, header.ConnID, decodedData)
-		case socks5.MsgTypeClose:
+		case entity.MsgTypeClose:
 			c.handleClose(traceID, header.ConnID, decodedData)
-		case socks5.MsgTypeError:
+		case entity.MsgTypeError:
 		default:
 			logger.Warn("[%s] RECV ERROR, unknown type %v", traceID, _type)
 		}
@@ -123,12 +123,12 @@ func (c *ClientReceiver) handleConnectAck(traceID, connID string, data []byte) {
 	var respBytes []byte
 	if notif.Code == 0 {
 		logger.Debug("[%s] RECV [%s], handling ConnectAck, success, code: %d, message: %s", traceID, shortConn, notif.Code, notif.Message)
-		respBytes = socks5.Socks5CmdConnectSuccess()
+		respBytes = entity.Socks5CmdConnectSuccess()
 		sk5Conn.SetConnected(true)
 
 	} else {
 		logger.Error("[%s] RECV [%s], handling ConnectAck, failed, code: %d, message: %s", traceID, shortConn, notif.Code, notif.Message)
-		respBytes = socks5.Socks5CmdConnectFailed()
+		respBytes = entity.Socks5CmdConnectFailed()
 		sk5Conn.SetConnected(false)
 	}
 

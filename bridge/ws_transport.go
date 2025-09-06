@@ -3,6 +3,7 @@ package bridge
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/yangxm/gecko/base"
 	"github.com/yangxm/gecko/coder"
 	"github.com/yangxm/gecko/logger"
 	"github.com/yangxm/gecko/util"
@@ -21,7 +22,7 @@ const (
 type WsTransport struct {
 	url             string
 	connParamGetter func() map[string]string
-	receiver        Receiver
+	receiver        base.BridgeReceiver
 	conn            *websocket.Conn
 	sendChan        chan []byte
 	mutex           sync.Mutex
@@ -29,7 +30,7 @@ type WsTransport struct {
 	done            chan struct{}
 }
 
-func NewWsTransport(url string, connParamGetter func() map[string]string, receiver Receiver) (*WsTransport, error) {
+func NewWsTransport(url string, connParamGetter func() map[string]string, receiver base.BridgeReceiver) (*WsTransport, error) {
 	t := &WsTransport{
 		url:             url,
 		connParamGetter: connParamGetter,
@@ -154,27 +155,28 @@ func (t *WsTransport) heartbeatLoop() {
 	}
 }
 
-func (t *WsTransport) Send(_type, flag byte, clientID, connID string, serverType byte, data []byte) error {
+func (t *WsTransport) Send(_type, flag byte, clientID, connID string, serverType byte, data []byte) (int, error) {
 	shortConn := util.ShortConnID(connID)
 	dataLen := len(data)
 	logger.Debug("[WSTP] [%s] send %d start", shortConn, dataLen)
 
 	if t.isClosed() {
 		logger.Error("[WSTP] [%s] send %d error: connection is closed", shortConn, dataLen)
-		return fmt.Errorf("connection is closed")
+		return 0, fmt.Errorf("connection is closed")
 	}
 
 	if encodedData, err := coder.Encode(_type, flag, clientID, connID, serverType, data); err != nil {
 		logger.Error("[WSTP] [%s] send %d error: encode error: %v", shortConn, dataLen, err)
-		return fmt.Errorf("[WSTP] send, encode error: %v", err)
+		return 0, fmt.Errorf("[WSTP] send, encode error: %v", err)
 	} else {
 		select {
 		case t.sendChan <- encodedData:
-			logger.Debug("[WSTP] [%s] send %d -> %d", shortConn, dataLen, len(encodedData))
-			return nil
+			encodedDataLen := len(encodedData)
+			logger.Debug("[WSTP] [%s] send %d -> %d", shortConn, dataLen, encodedDataLen)
+			return encodedDataLen, nil
 		default:
 			logger.Error("[WSTP] [%s] send %d -> %d error: send channel full, drop message", shortConn, dataLen, len(encodedData))
-			return fmt.Errorf("send channel full")
+			return 0, fmt.Errorf("send channel full")
 		}
 	}
 }
@@ -206,6 +208,7 @@ func (t *WsTransport) Close() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.closed {
+		logger.Info("[WSTP] already closed")
 		return
 	}
 	t.closed = true
