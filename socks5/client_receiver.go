@@ -1,11 +1,11 @@
-package bridge
+package socks5
 
 import (
 	"fmt"
+	"github.com/yangxm/gecko/base"
 	"github.com/yangxm/gecko/coder"
 	"github.com/yangxm/gecko/entity"
 	"github.com/yangxm/gecko/logger"
-	"github.com/yangxm/gecko/socks5"
 	"github.com/yangxm/gecko/util"
 	"google.golang.org/protobuf/proto"
 	"sync/atomic"
@@ -14,10 +14,14 @@ import (
 type ClientReceiver struct {
 	traceIdCounter atomic.Uint32
 	clientID       string
+	connManager    base.ConnManager[*Socks5Conn]
 }
 
 func NewClientReceiver(clientID string) *ClientReceiver {
-	return &ClientReceiver{clientID: clientID}
+	return &ClientReceiver{
+		clientID:    clientID,
+		connManager: Sock5ConnManager(),
+	}
 }
 
 func (c *ClientReceiver) nextTraceID() string {
@@ -59,12 +63,12 @@ func (c *ClientReceiver) OnReceived(data []byte) {
 		return
 	}
 
-	if !socks5.IsSk5ConnExist(header.ConnID) {
+	if !c.connManager.IsExist(header.ConnID) {
 		logger.Error("[%s] RECV ERROR, ConnID not exist, ConnID: %v", traceID, header.ConnID)
 		return
 	}
 
-	if header.Flag == nil || len(header.Flag) != 1 || entity.MsgFlagToClient != header.Flag[0] {
+	if header.Flag == nil || len(header.Flag) != 1 || base.MsgFlagToClient != header.Flag[0] {
 		logger.Error("[%s] RECV ERROR, illegal flag %v", traceID, header.Flag)
 		return
 	}
@@ -81,13 +85,13 @@ func (c *ClientReceiver) OnReceived(data []byte) {
 		return
 	} else {
 		switch _type {
-		case entity.MsgTypeData:
+		case base.MsgTypeData:
 			c.handleData(traceID, header.ConnID, decodedData)
-		case entity.MsgTypeConnectAck:
+		case base.MsgTypeConnectAck:
 			c.handleConnectAck(traceID, header.ConnID, decodedData)
-		case entity.MsgTypeClose:
+		case base.MsgTypeClose:
 			c.handleClose(traceID, header.ConnID, decodedData)
-		case entity.MsgTypeError:
+		case base.MsgTypeError:
 		default:
 			logger.Warn("[%s] RECV ERROR, unknown type %v", traceID, _type)
 		}
@@ -97,9 +101,9 @@ func (c *ClientReceiver) OnReceived(data []byte) {
 func (c *ClientReceiver) handleData(traceID, connID string, data []byte) {
 	shortConn := util.ShortConnID(connID)
 	logger.Debug("[%s] RECV [%s], handling Data", traceID, shortConn)
-	if wn, err := socks5.WriteToSk5ConnIfConnected(connID, data); err != nil {
+	if wn, err := c.connManager.WriteIfConnected(connID, data); err != nil {
 		logger.Error("[%s] RECV [%s] ERROR, write data to client failed: %v", traceID, shortConn, err)
-		socks5.RemoveAndCloseSk5Conn(connID)
+		c.connManager.RemoveAndClose(connID)
 	} else {
 		logger.Debug("[%s] RECV [%s], write data to client success, %d", traceID, shortConn, wn)
 	}
@@ -115,7 +119,7 @@ func (c *ClientReceiver) handleConnectAck(traceID, connID string, data []byte) {
 	}
 
 	logger.Debug("[%s] RECV [%s], handling ConnectAck, Addr --> %s:%d %v", traceID, shortConn, notif.Addr, notif.Port, notif.Atyp)
-	sk5Conn, res := socks5.GetSk5Conn(connID)
+	sk5Conn, res := c.connManager.Get(connID)
 	if !res || sk5Conn == nil {
 		logger.Error("[%s] RECV [%s] ERROR, handling ConnectAck, get conn failed", traceID, shortConn)
 		return
@@ -123,18 +127,18 @@ func (c *ClientReceiver) handleConnectAck(traceID, connID string, data []byte) {
 	var respBytes []byte
 	if notif.Code == 0 {
 		logger.Debug("[%s] RECV [%s], handling ConnectAck, success, code: %d, message: %s", traceID, shortConn, notif.Code, notif.Message)
-		respBytes = entity.Socks5CmdConnectSuccess()
+		respBytes = base.Socks5CmdConnectSuccess()
 		sk5Conn.SetConnected(true)
 
 	} else {
 		logger.Error("[%s] RECV [%s], handling ConnectAck, failed, code: %d, message: %s", traceID, shortConn, notif.Code, notif.Message)
-		respBytes = entity.Socks5CmdConnectFailed()
+		respBytes = base.Socks5CmdConnectFailed()
 		sk5Conn.SetConnected(false)
 	}
 
-	if wn, err := socks5.WriteToSk5Conn(connID, respBytes); err != nil {
+	if wn, err := c.connManager.Write(connID, respBytes); err != nil {
 		logger.Error("[%s] RECV [%s] ERROR, write ConnectAck to client failed: %v", traceID, shortConn, err)
-		socks5.RemoveAndCloseSk5Conn(connID)
+		c.connManager.RemoveAndClose(connID)
 	} else {
 		logger.Debug("[%s] RECV [%s], write ConnectAck to client success, %d", traceID, shortConn, wn)
 	}
@@ -150,7 +154,7 @@ func (c *ClientReceiver) handleClose(traceID, connID string, data []byte) {
 		logger.Debug("[%s] RECV [%s], handling Close, Addr --> %s:%d %v, code: %d, message: %s",
 			traceID, shortConn, notif.Addr, notif.Port, notif.Atyp, notif.Code, notif.Message)
 	}
-	socks5.RemoveAndCloseSk5Conn(connID)
+	c.connManager.RemoveAndClose(connID)
 	logger.Debug("[%s] RECV [%s], handling Close, closed conn", traceID, shortConn)
 }
 
@@ -165,6 +169,6 @@ func (c *ClientReceiver) handleError(traceID, connID string, data []byte) {
 			traceID, shortConn, notif.Addr, notif.Port, notif.Atyp, notif.Code, notif.Message)
 	}
 
-	socks5.RemoveAndCloseSk5Conn(connID)
+	c.connManager.RemoveAndClose(connID)
 	logger.Debug("[%s] RECV [%s], handling Error, closed conn", traceID, shortConn)
 }

@@ -3,7 +3,6 @@ package socks5
 import (
 	"fmt"
 	"github.com/yangxm/gecko/base"
-	"github.com/yangxm/gecko/entity"
 	"github.com/yangxm/gecko/logger"
 	"io"
 	"sync/atomic"
@@ -64,7 +63,7 @@ func (p *ProxyForwarder) pipe() {
 			written := 0
 			isBreak := false
 			for written < n {
-				wn, werr := p.bridgeTransport.Send(entity.MsgTypeData, entity.MsgFlagToServer, p.clientID, p.sk5Conn.ConnID(), 0x00, buf[written:n])
+				wn, werr := p.bridgeTransport.Send(base.MsgTypeData, base.MsgFlagToServer, p.clientID, p.sk5Conn.ConnID(), 0x00, buf[written:n])
 				if werr != nil {
 					logger.Error("PROXY[%s] F:%v --> T:%v  write error: %v", shortConn, src, dst, werr)
 					p.retries.Add(1)

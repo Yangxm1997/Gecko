@@ -2,7 +2,7 @@ package socks5
 
 import (
 	"fmt"
-	"github.com/yangxm/gecko/entity"
+	"github.com/yangxm/gecko/base"
 	"github.com/yangxm/gecko/util"
 	"github.com/yangxm/gecko/whitlist"
 	"io"
@@ -86,7 +86,7 @@ func handleAuth(sk5Conn *Socks5Conn) error {
 
 	ver, nMethods := buf[0], buf[1]
 	logger.Debug("SOCKS5[%s] handle auth, ver: %v, nMethods: %v", shortConn, ver, nMethods)
-	if ver != entity.socks5Version {
+	if ver != base.Socks5Version {
 		logger.Error("SOCKS5[%s] handle auth, invalid ver: %v", shortConn, ver)
 		return fmt.Errorf("[handle auth] invalid ver: %v", ver)
 	}
@@ -97,7 +97,7 @@ func handleAuth(sk5Conn *Socks5Conn) error {
 	}
 	logger.Debug("SOCKS5[%s] handle auth, methods: %v", shortConn, ver, buf[:nMethods])
 
-	if _, err := sk5Conn.Write(entity.Socks5NoAuth()); err != nil {
+	if _, err := sk5Conn.Write(base.Socks5AuthLegacy()); err != nil {
 		logger.Error("SOCKS5[%s] handle auth, write response failed: %v", shortConn, err)
 		return fmt.Errorf("[handle auth] write response failed: %v", err)
 	}
@@ -124,12 +124,12 @@ func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
 	ver, cmd, atyp := buf[0], buf[1], buf[3]
 	logger.Debug("SOCKS5[%s] handle request, ver: %v, cmd: %v, atyp: %v", shortConn, ver, cmd, atyp)
 
-	if ver != entity.socks5Version {
+	if ver != base.Socks5Version {
 		logger.Error("SOCKS5[%s] handle request, invalid ver: %v", shortConn, ver)
 		return fmt.Errorf("[handle request] invalid ver: %v", ver)
 	}
 
-	if cmd != entity.socks5CmdConnect {
+	if cmd != base.Socks5CmdConnect {
 		logger.Error("SOCKS5[%s] handle request, invalid cmd: %v", shortConn, cmd)
 		return fmt.Errorf("[handle request] invalid cmd: %v", cmd)
 	}
@@ -137,13 +137,13 @@ func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
 	// 读取地址
 	var addr string
 	switch atyp {
-	case entity.addrTypeIPv4:
+	case base.AddrTypeIPv4:
 		if _, err := io.ReadFull(sk5Conn, buf[:4]); err != nil {
 			logger.Error("SOCKS5[%s] handle request, read ipv4 failed: %v", shortConn, err)
 			return fmt.Errorf("[handle request] read ipv4 failed: %v", err)
 		}
 		addr = net.IPv4(buf[0], buf[1], buf[2], buf[3]).String()
-	case entity.addrTypeDomain:
+	case base.AddrTypeDomain:
 		if _, err := io.ReadFull(sk5Conn, buf[:1]); err != nil {
 			logger.Error("SOCKS5[%s] handle request, read domain length failed: %v", shortConn, err)
 			return fmt.Errorf("[handle request] read domain length failed: %v", err)
@@ -154,7 +154,7 @@ func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
 			return fmt.Errorf("[handle request] read domain failed: %v, len: %d", err, domainLen)
 		}
 		addr = string(buf[:domainLen])
-	case entity.addrTypeIPv6:
+	case base.AddrTypeIPv6:
 		if _, err := io.ReadFull(sk5Conn, buf[:16]); err != nil {
 			logger.Error("SOCKS5[%s] handle request, read ipv6 failed: %v", shortConn, err)
 			return fmt.Errorf("[handle request] read ipv6 failed: %v", err)
@@ -174,7 +174,7 @@ func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
 	logger.Debug("SOCKS5[%s] handle request, target: %s:%d", shortConn, addr, port)
 
 	// 连接目标
-	if whitlist.Contains(addr, atyp == entity.addrTypeDomain) {
+	if whitlist.Contains(addr, atyp == base.AddrTypeDomain) {
 		return handleDirect(sk5Conn, addr, port, atyp)
 	} else {
 		return handleProxy(sk5Conn, addr, port, atyp, bridgeConn)
@@ -195,13 +195,13 @@ func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 	if targetConn, err := net.Dial("tcp", targetAddr); err != nil {
 		logger.Error("SOCKS5[%s] handle direct, connect to target failed: %v", shortConn, err)
 		sk5Conn.SetConnected(false)
-		if _, err := sk5Conn.Write(entity.Socks5CmdConnectFailed()); err != nil {
+		if _, err := sk5Conn.Write(base.Socks5CmdConnectFailed()); err != nil {
 			logger.Warn("SOCKS5[%s] handle direct, write Socks5CmdConnectFailed failed: %v", shortConn, err)
 		}
 		return fmt.Errorf("[handle direct] connect to target failed: %v", err)
 	} else {
 		var targetAddrLog string
-		if atyp == entity.addrTypeDomain {
+		if atyp == base.AddrTypeDomain {
 			targetAddrLog = fmt.Sprintf("%s(%s)", targetAddr, targetConn.RemoteAddr())
 		} else {
 			targetAddrLog = fmt.Sprintf("%s", targetConn.RemoteAddr())
@@ -209,7 +209,7 @@ func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 
 		logger.Info("SOCKS5[%s] handle direct, L:%v --> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddrLog)
 		sk5Conn.SetConnected(true)
-		if _, err := sk5Conn.Write(entity.Socks5CmdConnectSuccess()); err != nil {
+		if _, err := sk5Conn.Write(base.Socks5CmdConnectSuccess()); err != nil {
 			logger.Error("SOCKS5[%s] handle direct, write Socks5CmdConnectSuccess failed: %v", shortConn, err)
 			if err := targetConn.Close(); err != nil {
 				logger.Warn("SOCKS5[%s] handle direct, close targetConn failed: %v", shortConn, err)
@@ -246,7 +246,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 	}
 
 	logger.Debug("SOCKS5[%s] handle proxy, connect to %s", shortConn, targetAddr)
-	AddSock5Conn(sk5Conn)
+	Sock5ConnManager().Add(sk5Conn.connID, sk5Conn)
 	forwarder, err := NewProxyForwarder(sk5Conn, bridgeConn)
 	if err != nil {
 		logger.Error("SOCKS5[%s] handle proxy, create proxy forward failed: %v", shortConn, err)
@@ -256,7 +256,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 	logger.Info("SOCKS5[%s] handle proxy, L:%v --> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddr)
 	forwarder.Start()
 	doneMessage := <-forwarder.Done
-	RemoveAndCloseSk5Conn(sk5Conn.connID)
+	Sock5ConnManager().RemoveAndClose(sk5Conn.connID)
 	if doneMessage == "" || strings.Contains(doneMessage, "EOF") || strings.Contains(doneMessage, "SkConn closed") {
 		logger.Info("SOCKS5[%s] handle proxy, L:%v ××> R:%s", shortConn, sk5Conn.RemoteAddr(), targetAddr)
 		logger.Debug("SOCKS5[%s] handle proxy, done with %s", shortConn, doneMessage)
