@@ -12,17 +12,21 @@ import (
 	"github.com/yangxm/gecko/logger"
 )
 
-type Socks5Server struct {
-	ID         string
-	BindAddr   string
-	BindPort   int
-	BridgeConn net.Conn
+type ClientLocalSocks5Server struct {
+	clientID        string
+	bindAddr        string
+	bindPort        int
+	bridgeTransport base.BridgeTransport
 }
 
-func (s *Socks5Server) Start() error {
-	infoStr := fmt.Sprintf("[%s] %s:%d", s.ID, s.BindAddr, s.BindPort)
+func NewClientLocalSocks5Server(clientID string, bindAddr string, bindPort int, bridgeTransport base.BridgeTransport) *ClientLocalSocks5Server {
+	return &ClientLocalSocks5Server{clientID: clientID, bindAddr: bindAddr, bindPort: bindPort, bridgeTransport: bridgeTransport}
+}
+
+func (s *ClientLocalSocks5Server) Start() error {
+	infoStr := fmt.Sprintf("[%s] %s:%d", s.clientID, s.bindAddr, s.bindPort)
 	logger.Info("Socks5 server start, %s", infoStr)
-	if listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.BindAddr, s.BindPort)); err != nil {
+	if listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.bindAddr, s.bindPort)); err != nil {
 		logger.Error("Socks5 server listen failed, %s, err: %v", infoStr, err)
 		return err
 	} else {
@@ -41,13 +45,13 @@ func (s *Socks5Server) Start() error {
 				continue
 			} else {
 				sk5Conn := NewSocks5Conn(conn)
-				go handleConn(sk5Conn, s.BridgeConn)
+				go s.handleConn(sk5Conn)
 			}
 		}
 	}
 }
 
-func handleConn(sk5Conn *Socks5Conn, bridgeConn net.Conn) {
+func (s *ClientLocalSocks5Server) handleConn(sk5Conn *Socks5Conn) {
 	shortConn := util.ShortConnID(sk5Conn.connID)
 	defer func(sk5Conn *Socks5Conn) {
 		if err := sk5Conn.Close(); err != nil {
@@ -57,18 +61,18 @@ func handleConn(sk5Conn *Socks5Conn, bridgeConn net.Conn) {
 	}(sk5Conn)
 
 	logger.Debug("SOCKS5[%s] handle conn start", shortConn)
-	if err := handleAuth(sk5Conn); err != nil {
+	if err := s.handleAuth(sk5Conn); err != nil {
 		logger.Error("SOCKS5[%s] handle auth failed: %v", shortConn, err)
 		return
 	}
 
-	if err := handleRequest(sk5Conn, bridgeConn); err != nil {
+	if err := s.handleRequest(sk5Conn); err != nil {
 		logger.Error("SOCKS5[%s] handle request failed: %v", shortConn, err)
 		return
 	}
 }
 
-func handleAuth(sk5Conn *Socks5Conn) error {
+func (s *ClientLocalSocks5Server) handleAuth(sk5Conn *Socks5Conn) error {
 	shortConn := util.ShortConnID(sk5Conn.connID)
 	logger.Debug("SOCKS5[%s] handle auth start", shortConn)
 	buf := make([]byte, 256)
@@ -106,7 +110,7 @@ func handleAuth(sk5Conn *Socks5Conn) error {
 	return nil
 }
 
-func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
+func (s *ClientLocalSocks5Server) handleRequest(sk5Conn *Socks5Conn) error {
 	shortConn := util.ShortConnID(sk5Conn.connID)
 	logger.Debug("SOCKS5[%s] handle request start", shortConn)
 	buf := make([]byte, 256)
@@ -175,13 +179,13 @@ func handleRequest(sk5Conn *Socks5Conn, bridgeConn net.Conn) error {
 
 	// 连接目标
 	if whitlist.Contains(addr, atyp == base.AddrTypeDomain) {
-		return handleDirect(sk5Conn, addr, port, atyp)
+		return s.handleDirect(sk5Conn, addr, port, atyp)
 	} else {
-		return handleProxy(sk5Conn, addr, port, atyp, bridgeConn)
+		return s.handleProxy(sk5Conn, addr, port, atyp)
 	}
 }
 
-func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
+func (s *ClientLocalSocks5Server) handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 	shortConn := util.ShortConnID(sk5Conn.connID)
 	targetAddr := fmt.Sprintf("%s:%d", addr, port)
 	logger.Debug("SOCKS5[%s] handle direct start --> %s", shortConn, targetAddr)
@@ -235,7 +239,7 @@ func handleDirect(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 	}
 }
 
-func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeConn net.Conn) error {
+func (s *ClientLocalSocks5Server) handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte) error {
 	shortConn := util.ShortConnID(sk5Conn.connID)
 	targetAddr := fmt.Sprintf("%s:%d", addr, port)
 	logger.Debug("SOCKS5[%s] handle proxy start --> %s", shortConn, targetAddr)
@@ -247,7 +251,7 @@ func handleProxy(sk5Conn *Socks5Conn, addr string, port int, atyp byte, bridgeCo
 
 	logger.Debug("SOCKS5[%s] handle proxy, connect to %s", shortConn, targetAddr)
 	Sock5ConnManager().Add(sk5Conn.connID, sk5Conn)
-	forwarder, err := NewProxyForwarder(sk5Conn, bridgeConn)
+	forwarder, err := NewProxyForwarder(sk5Conn, s.bridgeTransport, s.clientID)
 	if err != nil {
 		logger.Error("SOCKS5[%s] handle proxy, create proxy forward failed: %v", shortConn, err)
 		return fmt.Errorf("[handle proxy] create proxy forward failed: %v", err)

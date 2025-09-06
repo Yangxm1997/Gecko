@@ -204,12 +204,12 @@ func (t *WsTransport) reconnect() {
 	}
 }
 
-func (t *WsTransport) Close() {
+func (t *WsTransport) Close() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.closed {
 		logger.Info("[WSTP] already closed")
-		return
+		return nil
 	}
 	t.closed = true
 	close(t.done)
@@ -217,10 +217,11 @@ func (t *WsTransport) Close() {
 	if t.conn != nil {
 		if err := t.conn.Close(); err != nil {
 			logger.Error("[WSTP] close connection error: %v", err)
-			return
+			return err
 		}
 	}
 	logger.Info("[WSTP] closed")
+	return nil
 }
 
 func (t *WsTransport) isClosed() bool {

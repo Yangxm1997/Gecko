@@ -8,12 +8,7 @@ import (
 func main() {
 	logger.InitLogger("")
 	logger.Info("SOCKS5 SERVER START")
-
-	server := &socks5.Socks5Server{
-		ID:       "socks5",
-		BindAddr: "127.0.0.1",
-		BindPort: 1080,
-	}
+	server := socks5.NewClientLocalSocks5Server("", "127.0.0.1", 1080, nil)
 	server.Start()
 	logger.Info("SOCKS5 SERVER STOP")
 }
